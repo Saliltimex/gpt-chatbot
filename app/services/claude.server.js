@@ -1,93 +1,66 @@
-/**
- * Claude Service
- * Manages interactions with the Claude API
- */
-import { Anthropic } from "@anthropic-ai/sdk";
+// chatgptService.js
+import OpenAI from "openai";
 import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
 
-/**
- * Creates a Claude service instance
- * @param {string} apiKey - Claude API key
- * @returns {Object} Claude service with methods for interacting with Claude API
- */
-export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
-  // Initialize Claude client
-  const anthropic = new Anthropic({ apiKey });
+export function createChatGPTService(apiKey = process.env.OPENAI_API_KEY) {
+  const openai = new OpenAI({ apiKey });
 
-  /**
-   * Streams a conversation with Claude
-   * @param {Object} params - Stream parameters
-   * @param {Array} params.messages - Conversation history
-   * @param {string} params.promptType - The type of system prompt to use
-   * @param {Array} params.tools - Available tools for Claude
-   * @param {Object} streamHandlers - Stream event handlers
-   * @param {Function} streamHandlers.onText - Handles text chunks
-   * @param {Function} streamHandlers.onMessage - Handles complete messages
-   * @param {Function} streamHandlers.onToolUse - Handles tool use requests
-   * @returns {Promise<Object>} The final message
-   */
-  const streamConversation = async ({
-    messages,
-    promptType = AppConfig.api.defaultPromptType,
-    tools
-  }, streamHandlers) => {
-    // Get system prompt from configuration or use default
+  const streamConversation = async (
+    { messages, promptType = AppConfig.api.defaultPromptType, tools },
+    streamHandlers
+  ) => {
     const systemInstruction = getSystemPrompt(promptType);
 
-    // Create stream
-    const stream = await anthropic.messages.stream({
-      model: AppConfig.api.defaultModel,
-      max_tokens: AppConfig.api.maxTokens,
-      system: systemInstruction,
-      messages,
-      tools: tools && tools.length > 0 ? tools : undefined
+    // Format messages with system prompt
+    const chatMessages = [
+      { role: "system", content: systemInstruction },
+      ...messages,
+    ];
+
+    const stream = await openai.chat.completions.create({
+      model: AppConfig.api.defaultModel, // e.g., 'gpt-4o'
+      messages: chatMessages,
+      tools,
+      stream: true,
     });
 
-    // Set up event handlers
-    if (streamHandlers.onText) {
-      stream.on('text', streamHandlers.onText);
-    }
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
 
-    if (streamHandlers.onMessage) {
-      stream.on('message', streamHandlers.onMessage);
-    }
+      if (delta?.content && streamHandlers.onText) {
+        streamHandlers.onText(delta.content);
+      }
 
-    if (streamHandlers.onContentBlock) {
-      stream.on('contentBlock', streamHandlers.onContentBlock);
-    }
+      // Handle function/tool calls if used
+      const toolCall = delta?.tool_calls?.[0];
+      if (toolCall && streamHandlers.onToolUse) {
+        await streamHandlers.onToolUse(toolCall);
+      }
 
-    // Wait for final message
-    const finalMessage = await stream.finalMessage();
-
-    // Process tool use requests
-    if (streamHandlers.onToolUse && finalMessage.content) {
-      for (const content of finalMessage.content) {
-        if (content.type === "tool_use") {
-          await streamHandlers.onToolUse(content);
-        }
+      // Optionally collect full message
+      if (streamHandlers.onMessage) {
+        streamHandlers.onMessage(chunk);
       }
     }
 
-    return finalMessage;
+    // You can return a final constructed message if needed
+    return { success: true };
   };
 
-  /**
-   * Gets the system prompt content for a given prompt type
-   * @param {string} promptType - The prompt type to retrieve
-   * @returns {string} The system prompt content
-   */
   const getSystemPrompt = (promptType) => {
-    return systemPrompts.systemPrompts[promptType]?.content ||
-      systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content;
+    return (
+      systemPrompts.systemPrompts[promptType]?.content ||
+      systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content
+    );
   };
 
   return {
     streamConversation,
-    getSystemPrompt
+    getSystemPrompt,
   };
 }
 
 export default {
-  createClaudeService
+  createChatGPTService,
 };
