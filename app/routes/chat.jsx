@@ -322,6 +322,8 @@ async function getCustomerMcpEndpoint(shopDomain, conversationId) {
     const body = await response.json();
     const customerAccountUrl = body.data.shop.customerAccountUrl;
 
+    console.log(customerAccountUrl , "hhh" , body.data )
+
     // Store the customer account URL with conversation ID in the DB
     await storeCustomerAccountUrl(conversationId, customerAccountUrl);
 
