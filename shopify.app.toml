@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "YOUR_CLIENT_ID"
+client_id = "aae8bfd8dc0bc2c649b5a62965f38b01"
 name = "shop-chat-agent"
 handle = "shop-chat-agent"
 application_url = "https://gpt-chatbot-production-0e5c.up.railway.app"
